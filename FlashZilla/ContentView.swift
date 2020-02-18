@@ -11,21 +11,25 @@ import SwiftUI
 struct ContentView: View {
     
     //testing out gestures
+    //for magnification gesture
     @State private var currentAmount: CGFloat = 0
     @State private var finalAmount: CGFloat = 1
+    //for rotation gesture
+    @State private var currentAngle: Angle = .degrees(0)
+    @State private var finalAngle: Angle = .degrees(0)
     
     var body: some View {
         Text("Hello, World!")
-        .scaleEffect(currentAmount + finalAmount)
-            .gesture (
-                MagnificationGesture()
-                    .onChanged { amount in
-                        self.currentAmount = amount - 1
-                }
-                .onEnded { amount in
-                    self.finalAmount += self.currentAmount
-                    self.currentAmount = 0
-                }
+        .rotationEffect(currentAngle + finalAngle)
+        .gesture(
+            RotationGesture()
+                .onChanged({ (angle) in
+                    self.currentAngle = angle
+                })
+                .onEnded({ (angle) in
+                    self.finalAngle += self.currentAngle
+                    self.currentAngle = .degrees(0)
+                })
         )
     }
 }
