@@ -10,55 +10,139 @@ import SwiftUI
 import CoreHaptics
 
 struct ContentView: View {
+
+    //MARK: - Property wrappers
+    @State private var cards = [Card]()
+    @State private var timeRemaining = 100
+    @State private var isActive = true
+    @State private var showingEditScreen = false
+    @Environment(\.accessibilityDifferentiateWithoutColor) var differentiateWithoutColor
     
-    //testing out gestures
-    //for magnification gesture
-    @State private var currentAmount: CGFloat = 0
-    @State private var finalAmount: CGFloat = 1
-    //for rotation gesture
-    @State private var currentAngle: Angle = .degrees(0)
-    @State private var finalAngle: Angle = .degrees(0)
-    //for haptic feedback
-    @State private var engine: CHHapticEngine?
+    //MARK: - Properties
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        Text("Hello, World!")
-        .onAppear(perform: prepareHaptics)
-            .onTapGesture(perform: complexSuccess)
-    }
-    
-    func simpleSuccess() {
-        let generator =  UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-    }
-    
-    func prepareHaptics() {
-        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
-        do {
-            self.engine = try CHHapticEngine()
-            try? engine?.start()
-        } catch {
-            print("there was error \(error.localizedDescription)")
+        ZStack {
+            Image(decorative: "background")
+                .resizable()
+                .scaledToFill()
+                .edgesIgnoringSafeArea(.all)
+            VStack {
+                //timer here
+                Text("Time: \(timeRemaining)")
+                    .font(.largeTitle)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(Color.black)
+                            .opacity(0.75)
+                )
+                
+                ZStack {
+                    ForEach(0..<cards.count, id: \.self) { index in
+                        CardView(card: self.cards[index]) {
+                            withAnimation {
+                                self.removeCard(at: index)
+                            }
+                        }
+                            .stacked(at: index, in: self.cards.count)
+                        .allowsHitTesting(index == self.cards.count - 1)
+                    }
+                }
+                .allowsHitTesting(timeRemaining > 0)
+                if cards.isEmpty {
+                           Button("Start Again", action: resetCards)
+                               .padding()
+                               .background(Color.white)
+                               .foregroundColor(.black)
+                               .clipShape(Capsule())
+                       }
+            }
+            
+            //adding the plus button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        self.showingEditScreen = true
+                    }) {
+                        Image(systemName: "plus.circle")
+                        .padding()
+                            .background(Color.black.opacity(0.7))
+                        .clipShape(Circle())
+                    }
+                    Spacer()
+                }
+                
+            }
+            .foregroundColor(.white)
+            .font(.largeTitle)
+            .padding()
+            
+            if differentiateWithoutColor {
+                VStack {
+                    Spacer()
+                    
+                    HStack {
+                        Image("xmark.circle")
+                            .padding()
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                        Spacer()
+                        Image("checkmark.circle")
+                            .padding()
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                    }
+                    .foregroundColor(.white)
+                    .font(.largeTitle)
+                    .padding()
+                }
+            }
+        }
+        .sheet(isPresented: $showingEditScreen, onDismiss: resetCards) {
+            EditCards()
+        }
+    .onAppear(perform: resetCards)
+       
+        //MARK: - onRecieve modifiers
+        .onReceive(timer) { (time) in
+            guard self.isActive else { return }
+            if self.timeRemaining > 0 {
+                self.timeRemaining -= 1
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { (_) in
+            self.isActive = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { (_) in
+            if self.cards.isEmpty == false {
+                self.isActive = true
+            }
         }
     }
     
-    func complexSuccess() {
-        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics else { return }
-        var events = [CHHapticEvent]()
-        
-        //creating one intense, sharp tap
-        let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1)
-        let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 1)
-        let event = CHHapticEvent(eventType: .hapticTransient, parameters: [intensity, sharpness], relativeTime: 0)
-        events.append(event)
-        
-        //converting events into pattern to play
-        do {
-            let pattern = try CHHapticPattern(events: events, parameters: [])
-            let player = try engine?.makePlayer(with: pattern)
-            try player?.start(atTime: 0)
-        } catch {
-            print("error \(error.localizedDescription)")
+    //MARK: - Methods
+    func removeCard(at index: Int) {
+        self.cards.remove(at: index)
+        if cards.isEmpty {
+            self.isActive = false
+        }
+    }
+    
+    func resetCards() {
+        timeRemaining = 100
+        isActive = true
+        loadData()
+    }
+    
+    func loadData() {
+        if let data = UserDefaults.standard.data(forKey: "Cards") {
+            if let decoded = try? JSONDecoder().decode([Card].self, from: data) {
+                self.cards = decoded
+            }
         }
     }
 }
@@ -66,5 +150,14 @@ struct ContentView: View {
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
+    }
+}
+
+
+//MARK: - Extneions
+extension View {
+    func stacked(at position: Int, in total: Int) -> some View {
+        let offset = CGFloat(total - position)
+        return self.offset(CGSize(width: 0, height: offset * 10))
     }
 }
